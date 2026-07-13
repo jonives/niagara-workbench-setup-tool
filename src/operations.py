@@ -407,6 +407,8 @@ def set_module_verification_mode(install: InstallInfo, mode: str) -> OperationRe
     if not sys_props_path or not sys_props_path.is_file():
         sys_props_path = Path(install.install_path) / "etc" / "system.properties"
     if not sys_props_path.is_file():
+        sys_props_path = Path(install.install_path) / "defaults" / "system.properties"
+    if not sys_props_path.is_file():
         return OperationResult(False, f"system.properties not found at {sys_props_path}")
 
     try:

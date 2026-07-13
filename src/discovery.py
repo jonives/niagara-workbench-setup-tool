@@ -322,8 +322,10 @@ def scan_install(install_path: str, read_metadata: bool = True) -> Optional[Inst
     if bog_path.is_file():
         info.new_components_bog = str(bog_path)
 
-    # system.properties
+    # system.properties -- check etc/ first (overrides), then defaults/
     sys_props = p / 'etc' / 'system.properties'
+    if not sys_props.is_file():
+        sys_props = p / 'defaults' / 'system.properties'
     if sys_props.is_file():
         info.system_properties = str(sys_props)
         info.module_verification_mode = parse_system_properties(str(sys_props))
