@@ -20,7 +20,7 @@ A portable Windows GUI tool for migrating modules, copying configuration files, 
 - ❌ It has **not** been tested end-to-end on a clean system
 - ❌ It has **not** been tested with OEM installations other than Tridium and Distech
 - ❌ It has **not** been tested with Niagara versions other than those on the developer's machine (4.11–4.15)
-- ❌ It has **not** been tested with AX/legacy Niagara 3.x installations — the tool may detect them but file paths and structures differ
+- ❌ It has **not** been tested with legacy Niagara AX installations — the tool may detect them but file paths and structures differ
 - ❌ It has **not** been reviewed or endorsed by Tridium, Honeywell, Distech, or any Niagara OEM
 - ❌ It is **not** an official Tridium product
 - ❌ It is **not** affiliated with, endorsed by, or supported by Tridium or any Niagara OEM
