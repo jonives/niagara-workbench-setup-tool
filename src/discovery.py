@@ -24,7 +24,8 @@ BRAND_PATTERNS = [
     (re.compile(r'^Spyder[-_ ](\d+\.\d+\.\d+.*)$'), 'Honeywell'),
     # Generic fallback: "BrandName-Version" or "Brand Name-Version"
     # [\w\s]+ handles multi-word names like "Honeywell Niagara"
-    (re.compile(r'^([\w\s]+?)[-_ ](\d+\.\d+\.\d+.*)$'), None),
+    # N? handles OEMs that prefix version with "N" like "Honeywell WEBs-N4.11.0.142.4"
+    (re.compile(r'^([\w\s]+?)[-_ ](N?\d+\.\d+\.\d+.*)$'), None),
 ]
 
 DEFAULT_SCAN_ROOTS = [
@@ -175,7 +176,12 @@ def detect_brand_and_version(dir_name: str) -> tuple[str, str]:
             if brand is not None:
                 return brand, match.group(1)
             else:
-                return match.group(1), match.group(2)
+                detected_brand = match.group(1).strip()
+                version = match.group(2)
+                # Strip "N" prefix from version (e.g. "N4.11.0.142" -> "4.11.0.142")
+                if version.startswith('N'):
+                    version = version[1:]
+                return detected_brand, version
     return "", ""
 
 
