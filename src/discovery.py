@@ -185,6 +185,63 @@ def detect_brand_and_version(dir_name: str) -> tuple[str, str]:
     return "", ""
 
 
+def detect_version_from_dirname(dir_name: str) -> str:
+    """Extract just the version string from a directory name, ignoring brand."""
+    for pattern, brand in BRAND_PATTERNS:
+        match = pattern.match(dir_name)
+        if match:
+            ver = match.group(match.lastindex)  # last group is always the version
+            if ver.startswith('N'):
+                ver = ver[1:]
+            return ver
+    return ""
+
+
+def read_brand_properties(install_path: str) -> tuple[str, str]:
+    """Read brand.properties to get the canonical brand name.
+    Checks etc/brand.properties, then overlay/etc/brand.properties.
+    Returns (brand_id, workbench_title) -- either may be empty.
+    """
+    p = Path(install_path)
+    for bp_path in [p / 'etc' / 'brand.properties',
+                    p / 'overlay' / 'etc' / 'brand.properties']:
+        if not bp_path.is_file():
+            continue
+        try:
+            with open(bp_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            brand_id = ""
+            title = ""
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith('#') or not line:
+                    continue
+                if line.startswith('brand.id='):
+                    brand_id = line.split('=', 1)[1].strip()
+                elif line.startswith('workbench.title='):
+                    title = line.split('=', 1)[1].strip()
+            return brand_id, title
+        except Exception:
+            pass
+    return "", ""
+
+
+def is_niagara_install(install_path: str) -> bool:
+    """Check if a directory looks like a Niagara install by looking for
+    structural markers: modules/ dir with JARs, or bin/ + lib/ + jre/."""
+    p = Path(install_path)
+    modules_dir = p / 'modules'
+    if modules_dir.is_dir():
+        # Check for at least one .jar file
+        try:
+            next(modules_dir.glob('*.jar'))
+            return True
+        except StopIteration:
+            pass
+    # Fallback: bin + lib + jre (AX installs)
+    return (p / 'bin').is_dir() and (p / 'lib').is_dir()
+
+
 def extract_jar_type(filename: str) -> tuple[str, str]:
     """Extract module name and jar type from a JAR filename."""
     for suffix in ['-rt.jar', '-wb.jar', '-ux.jar', '-se.jar', '-lib.jar']:
@@ -275,16 +332,44 @@ def parse_system_properties(filepath: str) -> Optional[str]:
 
 
 def scan_install(install_path: str, read_metadata: bool = True) -> Optional[InstallInfo]:
-    """Scan a single Niagara installation directory."""
+    """Scan a single Niagara installation directory.
+    Uses a combined approach:
+    1. Structural check (modules/ with JARs, or bin/+lib/) to confirm it's a Niagara install
+    2. brand.properties for canonical brand name (etc/ or overlay/etc/)
+    3. Directory name regex for version extraction and brand fallback
+    """
     p = Path(install_path)
     if not p.is_dir():
         return None
 
-    dir_name = p.name
-    brand, version = detect_brand_and_version(dir_name)
-    if not brand and not version:
+    # 1. Structural check -- must look like a Niagara install
+    if not is_niagara_install(str(p)):
         return None
 
+    # 2. Extract version from directory name
+    dir_name = p.name
+    version = detect_version_from_dirname(dir_name)
+    if not version:
+        # Try the full brand+version detection as fallback
+        _, version = detect_brand_and_version(dir_name)
+    if not version:
+        return None  # Can't determine version, not a valid install
+
+    # 3. Get brand from brand.properties (canonical), fall back to directory name
+    brand_id, wb_title = read_brand_properties(str(p))
+    dir_brand, _ = detect_brand_and_version(dir_name)
+
+    if brand_id:
+        brand = brand_id
+    elif wb_title:
+        # Use the title as brand if no brand.id (e.g. "Distech Controls EC-Net Facilities")
+        brand = wb_title
+    elif dir_brand:
+        brand = dir_brand
+    else:
+        brand = "Unknown"
+
+    # Determine Niagara version (3 vs 4)
     if version.startswith('3.'):
         niagara_ver = 3
     elif version.startswith('4.'):
