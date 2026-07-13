@@ -54,48 +54,54 @@ class WorkerThread(QThread):
 
     def run(self):
         results = []
-        for op in self.operations_list:
-            self.log.emit(f"\n--- {op['name']} ---")
-            try:
-                if op['type'] == 'copy_bog':
-                    result = copy_new_components_bog(op['source'], op['target'])
-                elif op['type'] == 'copy_xml':
-                    result = copy_station_login_xml(
-                        op['source_brand'], op['target_brand'],
-                        op.get('copy_nav_tree', True),
-                        op.get('copy_recent_ords', True),
-                        op.get('copy_wb_profile', True),
-                    )
-                elif op['type'] == 'copy_modules':
-                    result = copy_modules(
-                        op['source_install'], op['target_install'],
-                        op['module_names'],
-                        lambda cur, tot, msg: self.progress.emit(cur, tot, msg)
-                    )
-                elif op['type'] == 'set_security':
-                    result = set_module_verification_mode(op['install'], op['mode'])
-                elif op['type'] == 'set_ram':
-                    result = set_nre_ram(
-                        op['base_path'],
-                        op.get('wb_xmx'),
-                        op.get('station_xmx'),
-                        op.get('nre_props_path')
-                    )
-                else:
-                    result = OperationResult(False, f"Unknown operation type: {op['type']}")
+        try:
+            for op in self.operations_list:
+                self.log.emit(f"\n--- {op['name']} ---")
+                try:
+                    if op['type'] == 'copy_bog':
+                        result = copy_new_components_bog(op['source'], op['target'])
+                    elif op['type'] == 'copy_xml':
+                        result = copy_station_login_xml(
+                            op['source_brand'], op['target_brand'],
+                            op.get('copy_nav_tree', True),
+                            op.get('copy_recent_ords', True),
+                            op.get('copy_wb_profile', True),
+                        )
+                    elif op['type'] == 'copy_modules':
+                        result = copy_modules(
+                            op['source_install'], op['target_install'],
+                            op['module_names'],
+                            lambda cur, tot, msg: self.progress.emit(cur, tot, msg)
+                        )
+                    elif op['type'] == 'set_security':
+                        result = set_module_verification_mode(op['install'], op['mode'])
+                    elif op['type'] == 'set_ram':
+                        result = set_nre_ram(
+                            op['base_path'],
+                            op.get('wb_xmx'),
+                            op.get('station_xmx'),
+                            op.get('nre_props_path')
+                        )
+                    else:
+                        result = OperationResult(False, f"Unknown operation type: {op['type']}")
 
-                results.append({'name': op['name'], 'result': result})
-                self.log.emit(result.message)
-                for d in result.details:
-                    self.log.emit(f"  {d}")
-                if result.backup_path:
-                    self.log.emit(f"  Backup: {result.backup_path}")
-            except Exception as e:
-                result = OperationResult(False, f"Exception: {e}")
-                results.append({'name': op['name'], 'result': result})
-                self.log.emit(f"ERROR: {e}")
-
-        self.finished_ops.emit(results)
+                    results.append({'name': op['name'], 'result': result})
+                    self.log.emit(result.message)
+                    for d in result.details:
+                        self.log.emit(f"  {d}")
+                    if result.backup_path:
+                        self.log.emit(f"  Backup: {result.backup_path}")
+                except Exception as e:
+                    result = OperationResult(False, f"Exception: {e}")
+                    results.append({'name': op['name'], 'result': result})
+                    self.log.emit(f"ERROR: {e}")
+        except Exception as e:
+            # Catch-all: ensure finished_ops is always emitted so GUI doesn't hang
+            self.log.emit(f"FATAL ERROR: {e}")
+            if not results:
+                results.append({'name': 'unknown', 'result': OperationResult(False, f"Fatal: {e}")})
+        finally:
+            self.finished_ops.emit(results)
 
 
 class MainWindow(QMainWindow):
@@ -104,10 +110,15 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Niagara Workbench Setup Tool - by jives")
 
         # Launch near-fullscreen
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.setMinimumSize(900, 600)
-        self.resize(int(screen.width() * 0.95), int(screen.height() * 0.92))
-        self.move(int(screen.width() * 0.025), int(screen.height() * 0.04))
+        screen = QApplication.primaryScreen()
+        if screen:
+            g = screen.availableGeometry()
+            self.setMinimumSize(900, 600)
+            self.resize(int(g.width() * 0.95), int(g.height() * 0.92))
+            self.move(int(g.width() * 0.025), int(g.height() * 0.04))
+        else:
+            self.setMinimumSize(900, 600)
+            self.resize(1100, 750)
 
         self.installs: list[InstallInfo] = []
         self.user_homes: list[UserHomeInfo] = []
@@ -430,10 +441,10 @@ class MainWindow(QMainWindow):
 
         diff = get_module_diff(source, target)
 
-        self._log(f"Reading metadata for {len(diff['source_only'])} source-only modules...")
+        self._log(f"Reading metadata for {len(diff['source_only'])} source-only and {len(diff['both'])} shared modules...")
         read_module_metadata_for(source, diff['source_only'])
         if diff['both']:
-            read_module_metadata_for(target, diff['both'][:50])
+            read_module_metadata_for(target, diff['both'])
         self._log("Metadata read complete.")
 
         self.mod_tree.clear()
@@ -484,13 +495,13 @@ class MainWindow(QMainWindow):
             })
 
         if group_by_vendor:
-            self._add_grouped(source_only_data, "Source Only (Copy Candidates)", group_by_version)
-            self._add_grouped(shared_data, "In Both", group_by_version)
-            self._add_grouped(target_only_data, "Target Only", group_by_version)
+            self._add_grouped(source_only_data, "Source Only (Copy Candidates)", group_by_version, "source_only")
+            self._add_grouped(shared_data, "In Both", group_by_version, "shared")
+            self._add_grouped(target_only_data, "Target Only", group_by_version, "target_only")
         else:
-            self._add_flat(source_only_data, "Source Only (Copy Candidates)")
-            self._add_flat(shared_data, "In Both")
-            self._add_flat(target_only_data, "Target Only")
+            self._add_flat(source_only_data, "Source Only (Copy Candidates)", "source_only")
+            self._add_flat(shared_data, "In Both", "shared")
+            self._add_flat(target_only_data, "Target Only", "target_only")
 
         self._update_mod_count()
         self._log(f"Compared {source.version} -> {target.version}: "
@@ -520,7 +531,7 @@ class MainWindow(QMainWindow):
             item.setToolTip(4, "Dependencies: " + ", ".join(data['deps']))
         return item
 
-    def _add_grouped(self, items_data: list[dict], section_label: str, sub_group_by_version: bool):
+    def _add_grouped(self, items_data: list[dict], section_label: str, sub_group_by_version: bool, role: str = ""):
         """Add items grouped by vendor, optionally sub-grouped by version.
         Section/vendor/version nodes have tri-state checkboxes that propagate to children."""
         if not items_data:
@@ -532,6 +543,8 @@ class MainWindow(QMainWindow):
         section.setForeground(0, QColor("#7b68ee"))
         section.setFlags(section.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
         section.setCheckState(0, Qt.Unchecked)
+        if role:
+            section.setData(0, Qt.UserRole, role)
         self.mod_tree.addTopLevelItem(section)
 
         # Group by vendor
@@ -589,7 +602,7 @@ class MainWindow(QMainWindow):
                     leaf = self._make_leaf_item(data)
                     vendor_node.addChild(leaf)
 
-    def _add_flat(self, items_data: list[dict], section_label: str):
+    def _add_flat(self, items_data: list[dict], section_label: str, role: str = ""):
         """Add items in a flat list under a tri-state section header."""
         if not items_data:
             return
@@ -599,6 +612,8 @@ class MainWindow(QMainWindow):
         header.setForeground(0, QColor("#7b68ee"))
         header.setFlags(header.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
         header.setCheckState(0, Qt.Unchecked)
+        if role:
+            header.setData(0, Qt.UserRole, role)
         self.mod_tree.addTopLevelItem(header)
 
         for data in items_data:
@@ -632,9 +647,9 @@ class MainWindow(QMainWindow):
         if any descendant matches."""
         # Leaf = no children
         if item.childCount() == 0:
-            # Search all columns
+            # Search all columns except Action (col 5) -- that's metadata, not searchable content
             matched = False
-            for col in range(item.columnCount()):
+            for col in range(min(item.columnCount(), 5)):
                 if filter_text in item.text(col).lower():
                     matched = True
                     break
@@ -670,7 +685,9 @@ class MainWindow(QMainWindow):
         root = self.mod_tree.invisibleRootItem()
         for i in range(root.childCount()):
             section = root.child(i)
-            is_source_only = "Source Only" in section.text(0)
+            # Use stored role instead of string matching
+            role = section.data(0, Qt.UserRole)
+            is_source_only = (role == "source_only")
             section.setCheckState(0, Qt.Checked if is_source_only else Qt.Unchecked)
         self._mod_tree_updating = False
         self._update_mod_count()
@@ -688,9 +705,10 @@ class MainWindow(QMainWindow):
         return result
 
     def _collect_checked(self, item: QTreeWidgetItem, result: list):
-        # Only leaf items (childCount == 0) with "Copy" action
+        # Collect any checked leaf item (childCount == 0) regardless of action column.
+        # The action column is informational -- if user checks it, they want it copied.
         if item.childCount() == 0 and (item.flags() & Qt.ItemIsUserCheckable):
-            if item.checkState(0) == Qt.Checked and item.text(5) == "Copy":
+            if item.checkState(0) == Qt.Checked:
                 result.append(item.text(0))
         for i in range(item.childCount()):
             self._collect_checked(item.child(i), result)
@@ -779,7 +797,7 @@ class MainWindow(QMainWindow):
                 'mode': mode,
             })
 
-        # RAM -- always applies to install + matching user home brands
+        # RAM -- applies to install + target brand's user home (not all brands)
         if self.chk_wb_ram.isChecked() or self.chk_station_ram.isChecked():
             wb_xmx = f"{self.spn_wb_ram.value()}G" if self.chk_wb_ram.isChecked() else None
             station_xmx = f"{self.spn_station_ram.value()}G" if self.chk_station_ram.isChecked() else None
@@ -792,20 +810,17 @@ class MainWindow(QMainWindow):
                 'station_xmx': station_xmx,
                 'nre_props_path': nre_path,
             })
-            # Automatically apply to matching user home brands too
-            matching_homes = [h for h in self.user_homes
-                              if h.version_major_minor == target.version_major_minor]
-            for home in matching_homes:
-                for brand in home.brands:
-                    if brand.nre_properties:
-                        ops.append({
-            'name': f"Set RAM (user home {brand.brand_name}): {home.version_major_minor}",
-                            'type': 'set_ram',
-                            'base_path': brand.base_path,
-                            'wb_xmx': wb_xmx,
-                            'station_xmx': station_xmx,
-                            'nre_props_path': brand.nre_properties,
-                        })
+            # Apply to target brand's user home only (not all brands for this version)
+            tgt_brand = get_brand_for_install(target, self.user_homes)
+            if tgt_brand and tgt_brand.nre_properties:
+                ops.append({
+                    'name': f"Set RAM (user home {tgt_brand.brand_name}): {target.version_major_minor}",
+                    'type': 'set_ram',
+                    'base_path': tgt_brand.base_path,
+                    'wb_xmx': wb_xmx,
+                    'station_xmx': station_xmx,
+                    'nre_props_path': tgt_brand.nre_properties,
+                })
 
         return ops
 
@@ -887,7 +902,9 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Operations Complete",
                                     f"All {success_count} operations completed successfully.")
 
-        self._do_scan()
+        # Defer rescan to avoid blocking the GUI thread during message box handling
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(100, self._do_scan)
 
 
 def _build_dark_palette() -> "QPalette":

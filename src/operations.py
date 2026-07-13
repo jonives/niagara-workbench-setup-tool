@@ -7,6 +7,7 @@ navTree.xml merge is additive (merges hosts/sessions, never replaces).
 import shutil
 import re
 import os
+import copy
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
@@ -96,7 +97,7 @@ def _merge_hosts(target_host: ET.Element, source_host: ET.Element) -> tuple[int,
         if key in existing_sessions:
             skipped += 1
         else:
-            target_host.append(src_session)
+            target_host.append(copy.deepcopy(src_session))
             added += 1
     return added, skipped
 
@@ -135,9 +136,10 @@ def _merge_nav_tree(source_xml: str, target_xml: str) -> tuple[str, int, int]:
                 added, _ = _merge_hosts(existing_hosts[key], src_child)
                 sessions_added += added
             else:
-                # Add new host
-                tgt_root.append(src_child)
-                existing_hosts[key] = src_child
+                # Add new host (deepcopy to avoid stealing from source tree)
+                new_host = copy.deepcopy(src_child)
+                tgt_root.append(new_host)
+                existing_hosts[key] = new_host
                 hosts_added += 1
 
         elif src_child.tag == 'folder':
@@ -156,13 +158,16 @@ def _merge_nav_tree(source_xml: str, target_xml: str) -> tuple[str, int, int]:
                             added, _ = _merge_hosts(tgt_folder_hosts[fkey], src_fc)
                             sessions_added += added
                         else:
-                            tgt_folder.append(src_fc)
+                            tgt_folder.append(copy.deepcopy(src_fc))
                             hosts_added += 1
             else:
-                tgt_root.append(src_child)
-                existing_folders[folder_name] = src_child
+                new_folder = copy.deepcopy(src_child)
+                tgt_root.append(new_folder)
+                existing_folders[folder_name] = new_folder
 
     # Write merged XML
+    # Note: _indent_xml reformats the entire file. This is acceptable because
+    # Niagara rewrites these files on launch anyway, so formatting is not preserved.
     _indent_xml(tgt_root)
     xml_str = ET.tostring(tgt_root, encoding='unicode', xml_declaration=False)
     xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
@@ -205,7 +210,7 @@ def _merge_recent_ords(source_xml: str, target_xml: str) -> tuple[str, int]:
     for src_entry in src_root.findall('entry'):
         ord_val = src_entry.get('ord', '')
         if ord_val and ord_val not in existing_ords:
-            tgt_root.append(src_entry)
+            tgt_root.append(copy.deepcopy(src_entry))
             existing_ords.add(ord_val)
             added += 1
 
@@ -323,25 +328,25 @@ def copy_station_login_xml(
 
 def get_brand_for_install(install: InstallInfo, user_homes: list) -> Optional[UserHomeBrand]:
     """Find the user home brand that matches an install's brand and version.
-    Maps install brand name -> user home brand directory name:
-      Tridium  -> tridium
-      Distech  -> distech
-      Vykon    -> vykon
-      Honeywell -> honeywell
-    Returns the first matching UserHomeBrand, or None.
+    Uses case-insensitive matching of install.brand against user home brand dir names.
+    Falls back to a known-aliases table for common mismatches.
     """
-    brand_map = {
-        'Tridium': 'tridium',
-        'Distech': 'distech',
-        'Vykon': 'vykon',
-        'Honeywell': 'honeywell',
+    # Known aliases: install brand -> possible user home dir names
+    brand_aliases = {
+        'Webs': ['honeywell', 'webs'],
+        'Honeywell': ['honeywell', 'webs'],
+        'Tridium': ['tridium'],
+        'vykon': ['vykon'],
+        'distech': ['distech'],
+        'TridiumEMEA': ['tridiumemea', 'tridium'],
     }
-    target_brand_name = brand_map.get(install.brand, install.brand.lower())
-    
+
+    target_names = brand_aliases.get(install.brand, [install.brand.lower()])
+
     for home in user_homes:
         if home.version_major_minor == install.version_major_minor:
             for brand in home.brands:
-                if brand.brand_name.lower() == target_brand_name.lower():
+                if brand.brand_name.lower() in [t.lower() for t in target_names]:
                     return brand
     return None
 
@@ -405,11 +410,15 @@ def set_module_verification_mode(install: InstallInfo, mode: str) -> OperationRe
     details = []
     sys_props_path = Path(install.system_properties) if install.system_properties else None
     if not sys_props_path or not sys_props_path.is_file():
-        sys_props_path = Path(install.install_path) / "etc" / "system.properties"
-    if not sys_props_path.is_file():
-        sys_props_path = Path(install.install_path) / "defaults" / "system.properties"
-    if not sys_props_path.is_file():
-        return OperationResult(False, f"system.properties not found at {sys_props_path}")
+        for candidate in [Path(install.install_path) / "etc" / "system.properties",
+                          Path(install.install_path) / "defaults" / "system.properties",
+                          Path(install.install_path) / "overlay" / "etc" / "system.properties",
+                          Path(install.install_path) / "overlay" / "defaults" / "system.properties"]:
+            if candidate.is_file():
+                sys_props_path = candidate
+                break
+    if not sys_props_path or not sys_props_path.is_file():
+        return OperationResult(False, f"system.properties not found in {install.install_path}")
 
     try:
         with open(sys_props_path, 'r', encoding='utf-8', errors='replace') as f:

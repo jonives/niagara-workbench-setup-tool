@@ -23,9 +23,9 @@ BRAND_PATTERNS = [
     (re.compile(r'^HawkVision[-_ ](\d+\.\d+\.\d+.*)$'), 'Honeywell'),
     (re.compile(r'^Spyder[-_ ](\d+\.\d+\.\d+.*)$'), 'Honeywell'),
     # Generic fallback: "BrandName-Version" or "Brand Name-Version"
-    # [\w\s]+ handles multi-word names like "Honeywell Niagara"
-    # N? handles OEMs that prefix version with "N" like "Honeywell WEBs-N4.11.0.142.4"
-    (re.compile(r'^([\w\s]+?)[-_ ](N?\d+\.\d+\.\d+.*)$'), None),
+    # Match from the end: find last [-_ ] followed by N?\d+\.\d+\.\d+
+    # This handles multi-word names with hyphens like "EC-Net Facilities-4.15"
+    (re.compile(r'^(.+?)[-_ ](N?\d+\.\d+\.\d+.*)$'), None),
 ]
 
 DEFAULT_SCAN_ROOTS = [
@@ -34,7 +34,7 @@ DEFAULT_SCAN_ROOTS = [
     r"C:\Program Files (x86)\Niagara",
 ]
 
-USER_HOME_NIAGARA_PATTERN = re.compile(r'^Niagara(\d+\.\d+)$')
+USER_HOME_NIAGARA_PATTERN = re.compile(r'^Niagara(\d+\.\d+(?:[uU]\d+)?)$')
 
 
 @dataclass
@@ -190,7 +190,8 @@ def detect_version_from_dirname(dir_name: str) -> str:
     for pattern, brand in BRAND_PATTERNS:
         match = pattern.match(dir_name)
         if match:
-            ver = match.group(match.lastindex)  # last group is always the version
+            # For all patterns, the version is in the last capture group
+            ver = match.group(match.lastindex)
             if ver.startswith('N'):
                 ver = ver[1:]
             return ver
@@ -228,23 +229,27 @@ def read_brand_properties(install_path: str) -> tuple[str, str]:
 
 def is_niagara_install(install_path: str) -> bool:
     """Check if a directory looks like a Niagara install by looking for
-    structural markers: modules/ dir with JARs, or bin/ + lib/ + jre/."""
+    structural markers: modules/ dir with JARs, or bin/ containing nre.jar."""
     p = Path(install_path)
     modules_dir = p / 'modules'
     if modules_dir.is_dir():
-        # Check for at least one .jar file
         try:
             next(modules_dir.glob('*.jar'))
             return True
         except StopIteration:
             pass
-    # Fallback: bin + lib + jre (AX installs)
-    return (p / 'bin').is_dir() and (p / 'lib').is_dir()
+    # Fallback for AX: bin/ dir with nre.jar or station.exe or wb.exe
+    bin_dir = p / 'bin'
+    if bin_dir.is_dir():
+        for marker in ['nre.jar', 'station.exe', 'wb.exe', 'plat.exe']:
+            if (bin_dir / marker).is_file():
+                return True
+    return False
 
 
 def extract_jar_type(filename: str) -> tuple[str, str]:
     """Extract module name and jar type from a JAR filename."""
-    for suffix in ['-rt.jar', '-wb.jar', '-ux.jar', '-se.jar', '-lib.jar']:
+    for suffix in ['-rt.jar', '-wb.jar', '-ux.jar', '-se.jar', '-lib.jar', '-doc.jar']:
         if filename.endswith(suffix):
             module_name = filename[:-len(suffix)]
             jar_type = suffix[1:-4]
@@ -350,9 +355,6 @@ def scan_install(install_path: str, read_metadata: bool = True) -> Optional[Inst
     dir_name = p.name
     version = detect_version_from_dirname(dir_name)
     if not version:
-        # Try the full brand+version detection as fallback
-        _, version = detect_brand_and_version(dir_name)
-    if not version:
         return None  # Can't determine version, not a valid install
 
     # 3. Get brand from brand.properties (canonical), fall back to directory name
@@ -405,29 +407,38 @@ def scan_install(install_path: str, read_metadata: bool = True) -> Optional[Inst
                 mod_info.meta = read_module_xml(str(jar_file))
             info.modules.append(mod_info)
 
-    # Find newComponents.bog
+    # Find newComponents.bog -- check defaults/, then overlay/defaults/
     if niagara_ver == 4:
-        bog_path = p / 'defaults' / 'workbench' / 'newComponents.bog'
+        for bog_path in [p / 'defaults' / 'workbench' / 'newComponents.bog',
+                         p / 'overlay' / 'defaults' / 'workbench' / 'newComponents.bog']:
+            if bog_path.is_file():
+                info.new_components_bog = str(bog_path)
+                break
     else:
         bog_path = p / 'workbench' / 'newComponents.bog'
-    if bog_path.is_file():
-        info.new_components_bog = str(bog_path)
+        if bog_path.is_file():
+            info.new_components_bog = str(bog_path)
 
-    # system.properties -- check etc/ first (overrides), then defaults/
-    sys_props = p / 'etc' / 'system.properties'
-    if not sys_props.is_file():
-        sys_props = p / 'defaults' / 'system.properties'
-    if sys_props.is_file():
-        info.system_properties = str(sys_props)
-        info.module_verification_mode = parse_system_properties(str(sys_props))
+    # system.properties -- check etc/ first (overrides), then defaults/, then overlay/defaults/
+    for sys_props in [p / 'etc' / 'system.properties',
+                      p / 'defaults' / 'system.properties',
+                      p / 'overlay' / 'etc' / 'system.properties',
+                      p / 'overlay' / 'defaults' / 'system.properties']:
+        if sys_props.is_file():
+            info.system_properties = str(sys_props)
+            info.module_verification_mode = parse_system_properties(str(sys_props))
+            break
 
-    # nre.properties
-    nre_props = p / 'defaults' / 'nre.properties'
-    if nre_props.is_file():
-        info.nre_properties_default = str(nre_props)
-        wb_xmx, station_xmx = parse_nre_properties(str(nre_props))
-        info.nre_wb_xmx = wb_xmx
-        info.nre_station_xmx = station_xmx
+    # nre.properties -- check defaults/, then etc/, then overlay/defaults/
+    for nre_props in [p / 'defaults' / 'nre.properties',
+                      p / 'etc' / 'nre.properties',
+                      p / 'overlay' / 'defaults' / 'nre.properties']:
+        if nre_props.is_file():
+            info.nre_properties_default = str(nre_props)
+            wb_xmx, station_xmx = parse_nre_properties(str(nre_props))
+            info.nre_wb_xmx = wb_xmx
+            info.nre_station_xmx = station_xmx
+            break
 
     return info
 
@@ -474,7 +485,9 @@ def scan_user_homes(username: str = None) -> list[UserHomeInfo]:
             continue
 
         version_major_minor = match.group(1)
-        home = UserHomeInfo(base_path=str(child), version_major_minor=version_major_minor)
+        # Strip update suffix (e.g. "4.11u2" -> "4.11") for matching
+        base_version = re.match(r'(\d+\.\d+)', version_major_minor).group(1)
+        home = UserHomeInfo(base_path=str(child), version_major_minor=base_version)
 
         for brand_dir in sorted(child.iterdir()):
             if not brand_dir.is_dir():
