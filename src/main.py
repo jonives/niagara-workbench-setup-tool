@@ -556,18 +556,16 @@ class MainWindow(QMainWindow):
         for vendor in sorted(vendor_groups.keys()):
             vendor_items = vendor_groups[vendor]
 
-            if sub_group_by_version:
-                # Vendor node (tri-state checkbox)
-                vendor_node = QTreeWidgetItem([
-                    f"{vendor} ({len(vendor_items)})", "", "", "", "", ""
-                ])
-                vendor_node.setFont(0, QFont("Segoe UI", 8, QFont.Bold))
-                vendor_node.setForeground(0, QColor("#b8b8d0"))
-                vendor_node.setFlags(vendor_node.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
-                vendor_node.setCheckState(0, Qt.Unchecked)
-                section.addChild(vendor_node)
+            # Create vendor node (shared between both paths)
+            vendor_node = QTreeWidgetItem([f"{vendor} ({len(vendor_items)})", "", "", "", "", ""])
+            vendor_node.setFont(0, QFont("Segoe UI", 8, QFont.Bold))
+            vendor_node.setForeground(0, QColor("#b8b8d0"))
+            vendor_node.setFlags(vendor_node.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+            vendor_node.setCheckState(0, Qt.Unchecked)
+            section.addChild(vendor_node)
 
-                # Sub-group by version
+            if sub_group_by_version:
+                # Sub-group by version under vendor node
                 version_groups: dict[str, list[dict]] = {}
                 for data in vendor_items:
                     ver = data['version'] or "?"
@@ -575,9 +573,7 @@ class MainWindow(QMainWindow):
 
                 for ver in sorted(version_groups.keys()):
                     ver_items = version_groups[ver]
-                    ver_node = QTreeWidgetItem([
-                        f"v{ver} ({len(ver_items)})", "", "", "", "", ""
-                    ])
+                    ver_node = QTreeWidgetItem([f"v{ver} ({len(ver_items)})", "", "", "", "", ""])
                     ver_node.setFont(0, QFont("Segoe UI", 8, QFont.Normal))
                     ver_node.setForeground(0, QColor("#9090b0"))
                     ver_node.setFlags(ver_node.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
@@ -585,22 +581,10 @@ class MainWindow(QMainWindow):
                     vendor_node.addChild(ver_node)
 
                     for data in ver_items:
-                        leaf = self._make_leaf_item(data)
-                        ver_node.addChild(leaf)
+                        ver_node.addChild(self._make_leaf_item(data))
             else:
-                # Vendor node (tri-state checkbox)
-                vendor_node = QTreeWidgetItem([
-                    f"{vendor} ({len(vendor_items)})", "", "", "", "", ""
-                ])
-                vendor_node.setFont(0, QFont("Segoe UI", 8, QFont.Bold))
-                vendor_node.setForeground(0, QColor("#b8b8d0"))
-                vendor_node.setFlags(vendor_node.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
-                vendor_node.setCheckState(0, Qt.Unchecked)
-                section.addChild(vendor_node)
-
                 for data in vendor_items:
-                    leaf = self._make_leaf_item(data)
-                    vendor_node.addChild(leaf)
+                    vendor_node.addChild(self._make_leaf_item(data))
 
     def _add_flat(self, items_data: list[dict], section_label: str, role: str = ""):
         """Add items in a flat list under a tri-state section header."""
@@ -919,7 +903,6 @@ def _build_dark_palette() -> "QPalette":
     accent      = QColor("#7b68ee")
     accent_hover= QColor("#6a5acd")
     highlight   = QColor("#4a3f7a")
-
     p.setColor(QPalette.Window,          bg)
     p.setColor(QPalette.WindowText,      text)
     p.setColor(QPalette.Base,            bg_alt)

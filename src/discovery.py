@@ -59,24 +59,6 @@ class ModuleInfo:
     full_path: str
     meta: Optional[ModuleMeta] = None  # from module.xml, may be None if read failed
 
-    def to_dict(self) -> dict:
-        return {
-            'filename': self.filename,
-            'module_name': self.module_name,
-            'jar_type': self.jar_type,
-            'size_bytes': self.size_bytes,
-            'full_path': self.full_path,
-            'meta': {
-                'vendor': self.meta.vendor,
-                'vendor_version': self.meta.vendor_version,
-                'description': self.meta.description,
-                'module_name': self.meta.module_name,
-                'preferred_symbol': self.meta.preferred_symbol,
-                'dependencies': self.meta.dependencies,
-                'runtime_profile': self.meta.runtime_profile,
-            } if self.meta else None,
-        }
-
 
 @dataclass
 class InstallInfo:
@@ -109,22 +91,6 @@ class InstallInfo:
             return rt
         return next((m for m in self.modules if m.module_name == module_name), None)
 
-    def to_dict(self) -> dict:
-        return {
-            'install_path': self.install_path,
-            'brand': self.brand,
-            'version': self.version,
-            'version_major_minor': self.version_major_minor,
-            'niagara_version': self.niagara_version,
-            'modules': [m.to_dict() for m in self.modules],
-            'new_components_bog': self.new_components_bog,
-            'system_properties': self.system_properties,
-            'nre_properties_default': self.nre_properties_default,
-            'module_verification_mode': self.module_verification_mode,
-            'nre_wb_xmx': self.nre_wb_xmx,
-            'nre_station_xmx': self.nre_station_xmx,
-        }
-
 
 @dataclass
 class UserHomeBrand:
@@ -139,19 +105,6 @@ class UserHomeBrand:
     nre_wb_xmx: Optional[str] = None
     nre_station_xmx: Optional[str] = None
 
-    def to_dict(self) -> dict:
-        return {
-            'brand_name': self.brand_name,
-            'base_path': self.base_path,
-            'nre_properties': self.nre_properties,
-            'nav_tree_xml': self.nav_tree_xml,
-            'recent_ords_xml': self.recent_ords_xml,
-            'wb_profile_xml': self.wb_profile_xml,
-            'credentials_xml': self.credentials_xml,
-            'nre_wb_xmx': self.nre_wb_xmx,
-            'nre_station_xmx': self.nre_station_xmx,
-        }
-
 
 @dataclass
 class UserHomeInfo:
@@ -159,13 +112,6 @@ class UserHomeInfo:
     base_path: str
     version_major_minor: str
     brands: list[UserHomeBrand] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return {
-            'base_path': self.base_path,
-            'version_major_minor': self.version_major_minor,
-            'brands': [b.to_dict() for b in self.brands],
-        }
 
 
 def detect_brand_and_version(dir_name: str) -> tuple[str, str]:
