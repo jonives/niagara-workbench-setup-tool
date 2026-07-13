@@ -244,22 +244,14 @@ class MainWindow(QMainWindow):
         self.chk_copy_bog.setToolTip("Copy the palette/bog file that defines New Component templates")
         file_layout.addWidget(self.chk_copy_bog)
 
-        self.chk_copy_xml = QCheckBox("Copy Station Login History (additive merge)")
-        self.chk_copy_xml.setToolTip(
-            "Merges navTree.xml and recentOrds.xml additively -- existing entries preserved.\n"
-            "wb-WbProfile.xml is replaced (window state is not additive).\n"
-            "Uses the brand from the main source/target selectors."
-        )
-        file_layout.addWidget(self.chk_copy_xml)
-
         xml_files_layout = QHBoxLayout()
-        xml_files_layout.setContentsMargins(20, 0, 0, 0)
-        self.chk_nav_tree = QCheckBox("navTree.xml")
-        self.chk_nav_tree.setChecked(True)
-        self.chk_recent_ords = QCheckBox("recentOrds.xml")
-        self.chk_recent_ords.setChecked(True)
-        self.chk_wb_profile = QCheckBox("wb-WbProfile.xml")
-        self.chk_wb_profile.setChecked(True)
+        xml_files_layout.setContentsMargins(0, 0, 0, 0)
+        self.chk_nav_tree = QCheckBox("Copy navTree.xml (merge)")
+        self.chk_nav_tree.setToolTip("Additively merge station connection tree -- existing entries preserved")
+        self.chk_recent_ords = QCheckBox("Copy recentOrds.xml (merge)")
+        self.chk_recent_ords.setToolTip("Additively merge recently visited ORDs -- existing entries preserved")
+        self.chk_wb_profile = QCheckBox("Copy wb-WbProfile.xml")
+        self.chk_wb_profile.setToolTip("Replace workbench window state profile")
         xml_files_layout.addWidget(self.chk_nav_tree)
         xml_files_layout.addWidget(self.chk_recent_ords)
         xml_files_layout.addWidget(self.chk_wb_profile)
@@ -752,7 +744,8 @@ class MainWindow(QMainWindow):
                 })
 
         # Station login XML -- derive brands from main source/target
-        if self.chk_copy_xml.isChecked():
+        if (self.chk_nav_tree.isChecked() or self.chk_recent_ords.isChecked()
+                or self.chk_wb_profile.isChecked()):
             src_brand = get_brand_for_install(source, self.user_homes)
             tgt_brand = get_brand_for_install(target, self.user_homes)
 
@@ -762,8 +755,12 @@ class MainWindow(QMainWindow):
                 self._log(f"WARNING: No user home brand found for target {target.brand} {target.version}")
 
             if src_brand and tgt_brand:
+                files = []
+                if self.chk_nav_tree.isChecked(): files.append("navTree")
+                if self.chk_recent_ords.isChecked(): files.append("recentOrds")
+                if self.chk_wb_profile.isChecked(): files.append("wbProfile")
                 ops.append({
-                    'name': f"Merge station login XML: {src_brand.brand_name} -> {tgt_brand.brand_name}",
+                    'name': f"Copy login XML ({'+'.join(files)}): {src_brand.brand_name} -> {tgt_brand.brand_name}",
                     'type': 'copy_xml',
                     'source_brand': src_brand,
                     'target_brand': tgt_brand,
