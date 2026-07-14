@@ -324,30 +324,40 @@ def copy_station_login_xml(
 
 
 # ---------------------------------------------------------------------------
-# Brand mapping from install
+# Brand mapping
 # ---------------------------------------------------------------------------
+
+BRAND_ALIASES = {
+    'Webs': ['honeywell', 'webs'],
+    'Honeywell': ['honeywell', 'webs'],
+    'Tridium': ['tridium'],
+    'vykon': ['vykon'],
+    'distech': ['distech'],
+    'TridiumEMEA': ['tridiumemea', 'tridium'],
+}
+
+
+def _brand_names_for(install_brand: str) -> list[str]:
+    """Return acceptable user-home brand names for a given install brand."""
+    return [n.lower() for n in BRAND_ALIASES.get(install_brand, [install_brand])]
+
+
+def brand_matches(install_brand: str, home_brand_name: str) -> bool:
+    """Check if a user home brand name matches an install brand (with aliases)."""
+    return home_brand_name.lower() in _brand_names_for(install_brand)
+
 
 def get_brand_for_install(install: InstallInfo, user_homes: list) -> Optional[UserHomeBrand]:
     """Find the user home brand that matches an install's brand and version.
     Uses case-insensitive matching of install.brand against user home brand dir names.
     Falls back to a known-aliases table for common mismatches.
     """
-    # Known aliases: install brand -> possible user home dir names
-    brand_aliases = {
-        'Webs': ['honeywell', 'webs'],
-        'Honeywell': ['honeywell', 'webs'],
-        'Tridium': ['tridium'],
-        'vykon': ['vykon'],
-        'distech': ['distech'],
-        'TridiumEMEA': ['tridiumemea', 'tridium'],
-    }
-
-    target_names = brand_aliases.get(install.brand, [install.brand.lower()])
+    target_names = _brand_names_for(install.brand)
 
     for home in user_homes:
         if home.version_major_minor == install.version_major_minor:
             for brand in home.brands:
-                if brand.brand_name.lower() in [t.lower() for t in target_names]:
+                if brand.brand_name.lower() in target_names:
                     return brand
     return None
 

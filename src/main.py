@@ -40,7 +40,7 @@ from discovery import (
 from operations import (
     copy_new_components_bog, copy_station_login_xml,
     copy_modules, set_module_verification_mode, set_nre_ram,
-    get_brand_for_install, OperationResult
+    get_brand_for_install, brand_matches, OperationResult
 )
 
 
@@ -387,6 +387,9 @@ class MainWindow(QMainWindow):
                 matching_homes = [h for h in self.user_homes if h.version_major_minor == inst.version_major_minor]
                 for home in matching_homes:
                     for brand in home.brands:
+                        # Only show user home brands that match this install's brand (with aliases)
+                        if not brand_matches(inst.brand, brand.brand_name):
+                            continue
                         home_label = f"User Home: {brand.brand_name} ({home.version_major_minor})"
                         home_item = QTreeWidgetItem([
                             home_label, brand.brand_name, home.version_major_minor,
