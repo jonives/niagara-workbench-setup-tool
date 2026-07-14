@@ -141,6 +141,7 @@ def _merge_nav_tree(source_xml: str, target_xml: str) -> tuple[str, int, int]:
                 tgt_root.append(new_host)
                 existing_hosts[key] = new_host
                 hosts_added += 1
+                sessions_added += len(src_child.findall('session'))
 
         elif src_child.tag == 'folder':
             folder_name = src_child.get('name', '')
@@ -248,7 +249,7 @@ def copy_station_login_xml(
     copied_count = 0
 
     # navTree.xml -- additive merge
-    if copy_nav_tree and source_brand.nav_tree_xml and source_brand.nav_tree_xml:
+    if copy_nav_tree and source_brand.nav_tree_xml:
         target_nav = target_etc / "navTree.xml"
         if target_nav.is_file():
             try:
@@ -430,7 +431,7 @@ def set_module_verification_mode(install: InstallInfo, mode: str) -> OperationRe
     backup_path = backup_file(str(sys_props_path), backup_dir)
     details.append(f"Backed up to: {backup_path}")
 
-    pattern = re.compile(r'^#?\s*niagara\.moduleVerificationMode\s*=\s*\w+', re.MULTILINE)
+    pattern = re.compile(r'^(#?\s*)niagara\.moduleVerificationMode\s*=\s*\S+', re.MULTILINE)
     replacement = f"niagara.moduleVerificationMode={mode}"
 
     if pattern.search(content):
@@ -477,33 +478,30 @@ def set_nre_ram(
 
     changes = []
 
+    def _update_xmx_line(content: str, key: str, value: str) -> str:
+        """Replace or append -Xmx on a java.options line. Removes any existing
+        -Xmx values to avoid duplicates, then appends the new one at the end.
+        """
+        line_re = re.compile(rf'^({re.escape(key)}\.java\.options=)(.*)$', re.MULTILINE)
+
+        def _rewrite_line(m: re.Match) -> str:
+            prefix = m.group(1)
+            opts = m.group(2)
+            # Strip all existing -Xmx<N><g|G|m|M> tokens and their preceding whitespace
+            opts = re.sub(r'\s*-Xmx\d+[GgMm]\b', '', opts).strip()
+            return f"{prefix}{opts} -Xmx{value}"
+
+        if line_re.search(content):
+            return line_re.sub(_rewrite_line, content)
+        return content.rstrip() + f"\n{key}.java.options=-Dfile.encoding=UTF-8 -Xmx{value}\n"
+
     if wb_xmx:
-        pattern = re.compile(r'^(wb\.java\.options=.*)-Xmx\d+[GgMm](.*)$', re.MULTILINE)
-        if pattern.search(content):
-            content = pattern.sub(lambda m: f"{m.group(1)}-Xmx{wb_xmx}{m.group(2)}", content)
-            changes.append(f"wb RAM -> {wb_xmx}")
-        else:
-            line_pattern = re.compile(r'^(wb\.java\.options=.*)$', re.MULTILINE)
-            if line_pattern.search(content):
-                content = line_pattern.sub(lambda m: f"{m.group(1)} -Xmx{wb_xmx}", content)
-                changes.append(f"wb RAM -> {wb_xmx} (added)")
-            else:
-                content += f"\nwb.java.options=-Dfile.encoding=UTF-8 -Xmx{wb_xmx}\n"
-                changes.append(f"wb RAM -> {wb_xmx} (new line)")
+        content = _update_xmx_line(content, 'wb', wb_xmx)
+        changes.append(f"wb RAM -> {wb_xmx}")
 
     if station_xmx:
-        pattern = re.compile(r'^(station\.java\.options=.*)-Xmx\d+[GgMm](.*)$', re.MULTILINE)
-        if pattern.search(content):
-            content = pattern.sub(lambda m: f"{m.group(1)}-Xmx{station_xmx}{m.group(2)}", content)
-            changes.append(f"station RAM -> {station_xmx}")
-        else:
-            line_pattern = re.compile(r'^(station\.java\.options=.*)$', re.MULTILINE)
-            if line_pattern.search(content):
-                content = line_pattern.sub(lambda m: f"{m.group(1)} -Xmx{station_xmx}", content)
-                changes.append(f"station RAM -> {station_xmx} (added)")
-            else:
-                content += f"\nstation.java.options=-Dfile.encoding=UTF-8 -Xmx{station_xmx}\n"
-                changes.append(f"station RAM -> {station_xmx} (new line)")
+        content = _update_xmx_line(content, 'station', station_xmx)
+        changes.append(f"station RAM -> {station_xmx}")
 
     if not changes:
         return OperationResult(True, "No changes requested", backup_path, details)

@@ -14,6 +14,7 @@ Features:
 
 import sys
 import os
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -92,12 +93,16 @@ class WorkerThread(QThread):
                     if result.backup_path:
                         self.log.emit(f"  Backup: {result.backup_path}")
                 except Exception as e:
+                    tb = traceback.format_exc()
                     result = OperationResult(False, f"Exception: {e}")
                     results.append({'name': op['name'], 'result': result})
                     self.log.emit(f"ERROR: {e}")
+                    self.log.emit(f"  Traceback:\n{tb}")
         except Exception as e:
             # Catch-all: ensure finished_ops is always emitted so GUI doesn't hang
+            tb = traceback.format_exc()
             self.log.emit(f"FATAL ERROR: {e}")
+            self.log.emit(f"  Traceback:\n{tb}")
             if not results:
                 results.append({'name': 'unknown', 'result': OperationResult(False, f"Fatal: {e}")})
         finally:

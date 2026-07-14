@@ -7,7 +7,7 @@ echo.
 
 cd /d "%~dp0"
 
-pip install PySide6 pyinstaller 2>nul
+pip install PySide6 pyinstaller
 
 pyinstaller build.spec --clean --noconfirm
 

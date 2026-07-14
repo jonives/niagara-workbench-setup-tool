@@ -416,9 +416,9 @@ def scan_for_installs(search_roots: list[str] = None, read_metadata: bool = Fals
 def scan_user_homes(username: str = None) -> list[UserHomeInfo]:
     """Scan user home for Niagara profile directories."""
     if username is None:
-        username = os.environ.get('USERNAME', os.environ.get('USER', ''))
-
-    user_home = Path(f"C:\\Users\\{username}")
+        user_home = Path(os.environ.get('USERPROFILE', Path.home()))
+    else:
+        user_home = Path.home() if username.lower() == os.environ.get('USERNAME', '').lower() else Path(f"C:\\Users\\{username}")
     if not user_home.is_dir():
         return []
 
