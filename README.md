@@ -4,6 +4,8 @@
 
 A portable Windows GUI tool for migrating modules, copying configuration files, and tuning properties across multiple Niagara N4 installations.
 
+![Screenshot](docs/screenshot.png)
+
 > ⚠️ **THIS TOOL IS UNTESTED. USE AT YOUR OWN RISK.**
 >
 > This tool has not been tested on any system other than the developer's machine.
