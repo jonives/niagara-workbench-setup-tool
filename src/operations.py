@@ -334,6 +334,7 @@ BRAND_ALIASES = {
     'vykon': ['vykon'],
     'distech': ['distech'],
     'TridiumEMEA': ['tridiumemea', 'tridium'],
+    'Alerton': ['alerton', 'alki'],
 }
 
 

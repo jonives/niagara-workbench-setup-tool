@@ -60,5 +60,13 @@ def test_extract_jar_type_wb():
     assert extract_jar_type("bajaui-wb.jar") == ("bajaui", "wb")
 
 
+def test_detect_brand_and_version_alerton_alki():
+    assert detect_brand_and_version("AlkiN4-4.15.1.16") == ("Alerton", "4.15.1.16")
+
+
+def test_detect_brand_and_version_alerton_alki_no_n_prefix():
+    assert detect_brand_and_version("Alki-4.14.0.162") == ("Alerton", "4.14.0.162")
+
+
 def test_extract_jar_type_other():
     assert extract_jar_type("custom.jar") == ("custom", "other")

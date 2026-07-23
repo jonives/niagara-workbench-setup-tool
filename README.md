@@ -75,6 +75,7 @@ The tool auto-detects brands from install directory names. Known patterns:
 | Distech | `EC-Net Facilities-4.x.x.x`, `EC-Net4-4.x.x.x` | `distech` |
 | Vykon | `Vykon-4.x.x.x` | `vykon` |
 | Honeywell | `HawkVision-4.x.x.x`, `Spyder-4.x.x.x` | `honeywell` |
+| Alerton | `AlkiN4-4.x.x.x` | `alerton`, `alki` |
 | Any OEM | `BrandName-4.x.x.x` | `brandname` (case-insensitive) |
 
 The generic fallback pattern handles any OEM that follows the standard `BrandName-Version` directory naming convention, including multi-word names like `Honeywell Niagara-4.14.0.162`.

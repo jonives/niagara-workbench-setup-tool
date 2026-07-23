@@ -22,6 +22,7 @@ BRAND_PATTERNS = [
     (re.compile(r'^Vykon[-_ ](\d+\.\d+\.\d+.*)$'), 'Vykon'),
     (re.compile(r'^HawkVision[-_ ](\d+\.\d+\.\d+.*)$'), 'Honeywell'),
     (re.compile(r'^Spyder[-_ ](\d+\.\d+\.\d+.*)$'), 'Honeywell'),
+    (re.compile(r'^Alki(?:N4)?-(\d+\.\d+\.\d+.*)$'), 'Alerton'),
     # Generic fallback: "BrandName-Version" or "Brand Name-Version"
     # Match from the end: find last [-_ ] followed by N?\d+\.\d+\.\d+
     # This handles multi-word names with hyphens like "EC-Net Facilities-4.15"
@@ -32,6 +33,7 @@ DEFAULT_SCAN_ROOTS = [
     r"C:\Niagara",
     r"C:\Program Files\Niagara",
     r"C:\Program Files (x86)\Niagara",
+    r"C:\Alerton",
 ]
 
 USER_HOME_NIAGARA_PATTERN = re.compile(r'^Niagara(\d+\.\d+(?:[uU]\d+)?)$')
